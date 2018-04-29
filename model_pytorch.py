@@ -8,11 +8,11 @@ torch.manual_seed(1)
 
 class symcnn_model(nn.Module):
 
-    def __init__(self, vocab_size = 3500, embedding_dim = 128, context_size = 20, conv_num_kernel = 256, fc1_num = 128, fc2_num = 32):
+    def __init__(self, vocab_size = 3500, embedding_dim = 128, context_size = 20, conv_num_kernel = 256, fc1_num = 128, fc2_num = 32, kernel_size = 5):
         super(symcnn_model, self).__init__()
         self.embeddings = nn.Embedding(vocab_size, embedding_dim)
         #self.left_conv  = nn.Conv1d(in_channels = embedding_dim, out_channels = conv_num_kernel, kernel_size = 5)
-        self.conv = nn.Conv1d(in_channels = embedding_dim, out_channels = conv_num_kernel, kernel_size = 5)
+        self.conv = nn.Conv1d(in_channels = embedding_dim, out_channels = conv_num_kernel, kernel_size = kernel_size)
         self.fc1 =  nn.Linear(2*conv_num_kernel, fc1_num)
         self.fc2 =  nn.Linear(fc1_num, fc2_num)
         self.fc3 =  nn.Linear(fc2_num, 1)

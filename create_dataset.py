@@ -3,6 +3,7 @@ import random
 import numpy as np
 import torch
 from time import time
+import itertools
 
 class Data_gener:
     def sentence_split(self, file_name):
@@ -49,7 +50,7 @@ class Data_gener:
         print('batch_size: ', batch_size)
         self.easy_init()
 
-    def first_init(self, augmentation = False):
+    def first_init(self):
         commits = [ line.strip('\n').split(',') for line in open('projects/selected_file_list/%s_selected_file_list.txt'%self.project,'r') ]
         assert len(commits) == 10000, "commits number is not 10000"
         
@@ -70,16 +71,16 @@ class Data_gener:
             commits[commit_id] = [commit_hash, commit_files, all_files]
             self.commit_dict[commit_id] = [commit_files, all_files]
 
-        for k in self.file_name_dict.keys():
-            file_name = self.file_name_dict[k]
-            file_name = np.lib.pad(file_name, [0, self.max_sequence_len - len(file_name)], 'constant')
-            self.file_name_dict[k] = file_name
+            for k in self.file_name_dict.keys():
+                file_name = self.file_name_dict[k]
+                file_name = np.lib.pad(file_name, [0, self.max_sequence_len - len(file_name)], 'constant')
+                self.file_name_dict[k] = file_name
 
-        commits = [self.commit_dict[ix] for ix in range(10000)]
-        self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
-        self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
-        self.save_dict()
-        
+            commits = [self.commit_dict[ix] for ix in range(10000)]
+            self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
+            self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
+            self.save_dict()
+            
 
 
     
@@ -132,19 +133,31 @@ class Data_gener:
             f_commit_dict.write(';'.join([str(k), ','.join(map(str,self.commit_dict[k][0])), ','.join(map(str,self.commit_dict[k][1]))]) + '\n')
         f_commit_dict.close()
 
-    def gener(self, train_or_test, torch_or_numpy = 'torch'):
-        while True:
-
-            project = self.project
-            max_sequence_len = self.max_sequence_len
-            batch_size = self.batch_size
+    def gener(self, train_or_test, torch_or_numpy = 'torch', augmentation = False):
+        project = self.project
+        max_sequence_len = self.max_sequence_len
+        batch_size = self.batch_size
+        
+        if train_or_test == 'train':
+            commits = self.train_commits
+        elif train_or_test == 'test':
+            commits = self.test_commits
+        else:
+            assert True, "train_or_test input error"
+        if augmentation:
+            for commit_ix in range(len(commits)):
+                commit_files = commits[commit_ix][0]
+                aug_files = list(itertools.permutations(commit_files,2))
+                for aug_id in aug_files:
+                    if aug_id not in self.file_name_dict.keys():
+                        names = list(map(lambda x:list(self.file_name_dict[x]), aug_id))
+                        names = list(map(lambda x: x[:x.index(0)] if 0 in x else x, names))
+                        aug_name = sum(names,[])[:self.max_sequence_len]
+                        aug_name = np.lib.pad(aug_name, [0, self.max_sequence_len - len(aug_name)], 'constant')
+                        self.file_name_dict[aug_id] = aug_name
+                commits[commit_ix][0] = commits[commit_ix][0] + aug_files
             
-            if train_or_test == 'train':
-                commits = self.train_commits
-            elif train_or_test == 'test':
-                commits = self.test_commits
-            else:
-                assert True, "train_or_test input error"
+        while True:
             
             num_commits   = len(commits)
             left_samples  = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
