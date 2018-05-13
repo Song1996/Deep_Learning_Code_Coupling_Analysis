@@ -9,7 +9,7 @@ lines = ''.join(f.readlines())
 f.close()
 
 commits = [x.split('\n') for x in lines.split('\n\n')]
-commits = list(filter(lambda x:len(x)>2 and len(x) < 10,commits))
+commits = list(filter(lambda x:len(x)>2 and len(x) < 6,commits))
 
 f = open('projects/selected_file_list/'+project+'_selected_file_list.txt','w')
 f.write( '\n'.join(','.join(commit) for commit in commits[:10000]) )

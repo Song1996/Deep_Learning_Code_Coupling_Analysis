@@ -50,6 +50,18 @@ class Data_gener:
         print('batch_size: ', batch_size)
         self.easy_init()
 
+    def fake_init(self):
+        commits = [ line.strip('\n').split(',') for line in open('projects/selected_file_list/%s_selected_file_list.txt'%self.project,'r') ]
+        all_files = {}
+        for c in commits:
+            for f in c[1:]:
+                if f not in all_files:
+                    all_files.add(f)
+        all_files = list(all_files)
+        for commit_id in range(len(commits)):
+            a_files = self.fit_file_name(all_files, filter_id_list = commit_files)
+        return
+
     def first_init(self):
         commits = [ line.strip('\n').split(',') for line in open('projects/selected_file_list/%s_selected_file_list.txt'%self.project,'r') ]
         assert len(commits) == 10000, "commits number is not 10000"
@@ -71,15 +83,15 @@ class Data_gener:
             commits[commit_id] = [commit_hash, commit_files, all_files]
             self.commit_dict[commit_id] = [commit_files, all_files]
 
-            for k in self.file_name_dict.keys():
-                file_name = self.file_name_dict[k]
-                file_name = np.lib.pad(file_name, [0, self.max_sequence_len - len(file_name)], 'constant')
-                self.file_name_dict[k] = file_name
+        for k in self.file_name_dict.keys():
+            file_name = self.file_name_dict[k]
+            file_name = np.lib.pad(file_name, [0, self.max_sequence_len - len(file_name)], 'constant')
+            self.file_name_dict[k] = file_name
 
-            commits = [self.commit_dict[ix] for ix in range(10000)]
-            self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
-            self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
-            self.save_dict()
+        commits = [self.commit_dict[ix] for ix in range(10000)]
+        self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
+        self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
+        self.save_dict()
             
 
 
@@ -133,7 +145,7 @@ class Data_gener:
             f_commit_dict.write(';'.join([str(k), ','.join(map(str,self.commit_dict[k][0])), ','.join(map(str,self.commit_dict[k][1]))]) + '\n')
         f_commit_dict.close()
 
-    def gener(self, train_or_test, torch_or_numpy = 'torch', augmentation = False):
+    def gener(self, train_or_test, torch_or_numpy = 'torch', augmentation = False, big_autmentation = False):
         project = self.project
         max_sequence_len = self.max_sequence_len
         batch_size = self.batch_size
@@ -155,8 +167,8 @@ class Data_gener:
                         aug_name = sum(names,[])[:self.max_sequence_len]
                         aug_name = np.lib.pad(aug_name, [0, self.max_sequence_len - len(aug_name)], 'constant')
                         self.file_name_dict[aug_id] = aug_name
-                commits[commit_ix][0] = commits[commit_ix][0] + aug_files
-            
+                commits[commit_ix][0] = commits[commit_ix][0] + aug_files       
+        
         while True:
             
             num_commits   = len(commits)
@@ -186,12 +198,17 @@ class Data_gener:
     def commit_validation_generation(self, commit_ix, file_ix):
         commit = self.test_commits[commit_ix%len(self.test_commits)]
         assert file_ix in range(len(commit[0])), "commit_validation_gener error, file_ix not in commit"
-        right_files_id = commit[0][:file_ix] + commit[0][file_ix+1:] + commit[1]
-        num_other_files = len(right_files_id)
-        label_samples = torch.Tensor([1]*(len(commit[0])-1) + [0]*len(commit[1]))
+        right_files_id_ = commit[0][:file_ix] + commit[0][file_ix+1:] + commit[1]
+        num_other_files = len(right_files_id_)
+        label_samples_ = [1]*(len(commit[0])-1) + [0]*len(commit[1])
+        ix_shuffle = list(range(len(right_files_id_)))
+        random.shuffle(ix_shuffle)
+        right_files_id = [right_files_id_[ix] for ix in ix_shuffle]
+        label_samples = [label_samples_[ix] for ix in ix_shuffle]
+        label_samples = torch.Tensor(label_samples)
         left_samples = torch.LongTensor(np.array([self.file_name_dict[commit[0][file_ix]]]*num_other_files))
         right_samples = torch.LongTensor( np.array(list(map(lambda x:self.file_name_dict[x], right_files_id))) )
-        return left_samples, right_samples, label_samples
+        return left_samples, right_samples, label_samples.view(-1,1)
 
     def reverse_translate(self,X_array):
         if type(X_array) == torch.autograd.variable.Variable:

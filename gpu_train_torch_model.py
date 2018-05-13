@@ -1,4 +1,4 @@
-from model_pytorch import symcnn_model
+from ml_model import symcnn_model
 import torch
 import torch.autograd as autograd
 import torch.nn as nn
@@ -14,24 +14,29 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 BATCH_SIZE = 8196
-EMBEDDING_DIM = 128
-CONV_NUM_KERNEL = 256
-KERNEL_SIZE = 5
+EMBEDDING_DIM = 64
+CONV_NUM_KERNEL1 = 128
+CONV_NUM_KERNEL2 = 64
+KERNEL_SIZE2 = 3
+KERNEL_SIZE1 = 3
 FC1_NUM = 128
 FC2_NUM = 32
 START_TRAIN_STEPS = 0
 END_TRAIN_STEPS = 0
 START_AUG_TRAIN_STEPS = 0
-END_AUG_TRAIN_STEPS = 900001
-INIT_LEARNING_RATE = 0.00001
-INIT_MODEL_NAME = ''
+END_AUG_TRAIN_STEPS = 300001
+INIT_LEARNING_RATE1 = 0.001
+INIT_LEARNING_RATE2 = 0.001
+TOP_10_HIT_GATE1 = 0.89
+TOP_10_HIT_GATE2 = 3
+INIT_MODEL_NAME = ''#'model-0.3014-pars-2018-05-12-01-44.pkl'
 DEBUG = True
-EXPER_COMMENT = 'with augmentation from zero streamline\n embedding_dim %d\n conv_num_kernel %d\n kernel_size %d\n \
+EXPER_COMMENT = 'continue with augmentation from zero streamline\n embedding_dim %d\n conv_num_kernel1 %d\n kernel_size1 %d\n \
 fc1_num %d\n fc2_num %d\n start_train_steps %d\n end_train_steps %d\n start_aug_train_steps %d\n \
-end_aug_train_steps %d\n init_learning_rate %d\n init_model_name %s\n' \
-%(EMBEDDING_DIM, CONV_NUM_KERNEL, KERNEL_SIZE, FC1_NUM, FC2_NUM, START_TRAIN_STEPS, END_TRAIN_STEPS, \
-START_AUG_TRAIN_STEPS, END_AUG_TRAIN_STEPS, INIT_LEARNING_RATE, INIT_MODEL_NAME)
-INIT_TEST = True and (DEBUG == '')
+end_aug_train_steps %d\n init_learning_rate1 %f\ninit_learning_rate2 %f\n init_model_name %s\n' \
+%(EMBEDDING_DIM, CONV_NUM_KERNEL1, KERNEL_SIZE1, FC1_NUM, FC2_NUM, START_TRAIN_STEPS, END_TRAIN_STEPS, \
+START_AUG_TRAIN_STEPS, END_AUG_TRAIN_STEPS, INIT_LEARNING_RATE1, INIT_LEARNING_RATE2, INIT_MODEL_NAME)
+INIT_TEST = True and (DEBUG == False) and (START_AUG_TRAIN_STEPS == 0) and (INIT_MODEL_NAME != '')
 print(EXPER_COMMENT)
 
 experiment_start_time = time.strftime('%Y-%m-%d-%H-%M',time.localtime(time.time()))
@@ -48,13 +53,13 @@ else:
 g = Data_gener('wine', batch_size = BATCH_SIZE)
 gg = g.gener('train', augmentation=False)
 ga = g.gener('train', augmentation=True)
-criterion = nn.MSELoss()
-net = symcnn_model(embedding_dim = EMBEDDING_DIM, conv_num_kernel = CONV_NUM_KERNEL, fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size = KERNEL_SIZE).cuda()
+criterion = nn.BCELoss()
+net = symcnn_model(embedding_dim = EMBEDDING_DIM, conv_num_kernel1 = CONV_NUM_KERNEL1, \
+fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size1 = KERNEL_SIZE1, kernel_size2 = KERNEL_SIZE2,conv_num_kernel2 = CONV_NUM_KERNEL2).cuda()
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-pars-first-night.pkl'))
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-0.8947-pars-2018-04-18-20-21.pkl'))
 if INIT_MODEL_NAME != '':
     net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/'+INIT_MODEL_NAME))
-optimizer = optim.RMSprop(net.parameters(), lr=INIT_LEARNING_RATE)
 
 def analysis_result(output, xy, label, loss, hit = False):
     mse_loss = float(loss.data)
@@ -63,7 +68,7 @@ def analysis_result(output, xy, label, loss, hit = False):
     label_np = label.cpu().numpy().squeeze().astype('int64')
     acc = (np.dot(y_around, label_np)+np.dot(1-y_around, 1-label_np))/BATCH_SIZE
     auc = roc_auc_score(label_np, y_numpy)
-    report_str = 'mse_loss: %.5f,\tacc: %.3f,\tauc: %.3f'%(mse_loss,acc,auc)
+    report_str = 'mse_loss: %.5f, acc: %.3f, auc: %.3f'%(mse_loss,acc,auc)
     if hit == True:
         sorted_ix = sorted(range(y_numpy.shape[0]), key = lambda x:y_numpy[x], reverse = True)
         hits_info = list(map(lambda x:label_np[x], sorted_ix))
@@ -139,7 +144,7 @@ if INIT_TEST:
     print(val_report)
 
 
-def train_with_gener(gener,cnt):
+def train_with_gener(gener,cnt, optim, top_10_hit_gate):
     xy = next(gener)
     x = [autograd.Variable(i.cuda()) for i in xy[:2]]
     label = xy[2].cuda()
@@ -151,10 +156,22 @@ def train_with_gener(gener,cnt):
     if cnt%100 == 0:
         output_t = net(x_t)
         loss_t = criterion(output_t, target_t)
-        short_report = validation(range(10))[8]
+        val_analysis = validation(range(10))
+        short_report = val_analysis[8]
+        top_10_hit = val_analysis[1]
         temple_report = '%05d:  '%(cnt)+ analysis_result(output, xy, label, loss)[0] +'\t validation:\t' + short_report
         print(temple_report)
         f_log.write(temple_report + '\n')
+        if top_10_hit >= top_10_hit_gate:
+            val_report_data = validation(range(len(g.test_commits)))
+            val_report = val_report_data[8]
+            top_10_hit = val_report_data[1]
+            print(val_report)
+            cur_time = time.strftime('%Y-%m-%d-%H-%M',time.localtime(time.time()))
+            torch.save(net, '/home/song/change_recommend_pytorch/models/model-%.4f-%s.pkl'%(top_10_hit, cur_time)) 
+            torch.save(net.state_dict(), '/home/song/change_recommend_pytorch/models/model-%.4f-pars-%s.pkl'%(top_10_hit, cur_time))
+            print('model_saved')
+            return False
     if cnt%5000 == 0 and cnt > 0:
         val_report_data = validation(range(len(g.test_commits)))
         val_report = val_report_data[8]
@@ -166,12 +183,17 @@ def train_with_gener(gener,cnt):
         f_log.write(val_report)
         print(val_report)
     loss.backward()
-    optimizer.step()
+    optim.step()
+    return False
 
+optimizer = optim.RMSprop(net.parameters(), lr=INIT_LEARNING_RATE1)
 for cnt in range(START_TRAIN_STEPS,END_TRAIN_STEPS):
-    train_with_gener(gg, cnt)
+    if train_with_gener(gg, cnt, optimizer, TOP_10_HIT_GATE1):
+        break
+optimizer = optim.RMSprop(net.parameters(), lr=INIT_LEARNING_RATE2)
 for cnt in range(START_AUG_TRAIN_STEPS, END_AUG_TRAIN_STEPS):
-    train_with_gener(ga, cnt)
+    if train_with_gener(ga, cnt, optimizer, TOP_10_HIT_GATE2):
+        break
 
 #val_report = validation()[0]
 #f_log.write(val_report)
