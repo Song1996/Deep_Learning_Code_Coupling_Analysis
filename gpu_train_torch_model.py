@@ -1,4 +1,5 @@
 from ml_model import symcnn_model
+from dnn_model import dnn_model
 import torch
 import torch.autograd as autograd
 import torch.nn as nn
@@ -14,6 +15,7 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 DEVICE_ID = 0
+TFIDF = True
 BATCH_SIZE = 4096
 EMBEDDING_DIM = 64
 CONV_NUM_KERNEL1 = 300
@@ -34,9 +36,9 @@ INIT_MODEL_NAME = ''#'model-0.3014-pars-2018-05-12-01-44.pkl'
 DEBUG = False
 EXPER_COMMENT = 'continue with augmentation from zero streamline\n embedding_dim %d\n conv_num_kernel1 %d\n kernel_size1 %d\n conv_num_kernel2 %d\n kernel_size2 %d\n \
 fc1_num %d\n fc2_num %d\n start_train_steps %d\n end_train_steps %d\n start_aug_train_steps %d\n \
-end_aug_train_steps %d\n init_learning_rate1 %f\ninit_learning_rate2 %f\n init_model_name %s\n' \
+end_aug_train_steps %d\n init_learning_rate1 %f\ninit_learning_rate2 %f\n init_model_name %s\n TFIDF %d\n' \
 %(EMBEDDING_DIM, CONV_NUM_KERNEL1, KERNEL_SIZE1, CONV_NUM_KERNEL2, KERNEL_SIZE2, FC1_NUM, FC2_NUM, START_TRAIN_STEPS, END_TRAIN_STEPS, \
-START_AUG_TRAIN_STEPS, END_AUG_TRAIN_STEPS, INIT_LEARNING_RATE1, INIT_LEARNING_RATE2, INIT_MODEL_NAME)
+START_AUG_TRAIN_STEPS, END_AUG_TRAIN_STEPS, INIT_LEARNING_RATE1, INIT_LEARNING_RATE2, INIT_MODEL_NAME, TFIDF)
 INIT_TEST = True and (DEBUG == False) and (START_AUG_TRAIN_STEPS == 0) and (INIT_MODEL_NAME != '')
 print(EXPER_COMMENT)
 
@@ -52,14 +54,18 @@ else:
     f_log.write('experiment_start_time:\t'+experiment_start_time+'\n')
     f_log.write(EXPER_COMMENT+'\n')
 
-g = Data_gener('wine', batch_size = BATCH_SIZE)
+g = Data_gener('wine', batch_size = BATCH_SIZE,TFIDF =TFIDF)
 gg = g.gener('train', augmentation=False)
 ga = g.gener('train', augmentation=True)
 criterion = nn.BCELoss()
-net = symcnn_model(embedding_dim = EMBEDDING_DIM, conv_num_kernel1 = CONV_NUM_KERNEL1, \
+if not TFIDF:
+    net = symcnn_model(embedding_dim = EMBEDDING_DIM, conv_num_kernel1 = CONV_NUM_KERNEL1, \
 fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size1 = KERNEL_SIZE1, kernel_size2 = KERNEL_SIZE2,conv_num_kernel2 = CONV_NUM_KERNEL2).cuda(DEVICE_ID)
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-pars-first-night.pkl'))
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-0.8947-pars-2018-04-18-20-21.pkl'))
+else:
+    net = dnn_model(fc1_num = FC1_NUM, fc2_num = FC2_NUM).cuda(DEVICE_ID)
+
 if INIT_MODEL_NAME != '':
     net.load_state_dict(torch.load('/home/ub102/change_recommend_pytorch/models/'+INIT_MODEL_NAME))
 

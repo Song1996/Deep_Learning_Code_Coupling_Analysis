@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from time import time
 import itertools
+from math import log
 
 class Data_gener:
     def sentence_split(self, file_name):
@@ -33,11 +34,13 @@ class Data_gener:
         return file_name_list[:cnt]
 
 
-    def __init__(self, project , max_sequence_len =20, batch_size = 512):
+    def __init__(self, project , max_sequence_len =20, batch_size = 512, TFIDF = False, WORD_NUM=3500):
         #random.seed(1)
         self.project = project
         self.max_sequence_len = max_sequence_len
         self.batch_size = batch_size
+        self.TFIDF = TFIDF
+        self.word_num =WORD_NUM
 
         self.file_id_dict = dict({})
         self.word_dict = dict({' ':0})
@@ -129,6 +132,30 @@ class Data_gener:
         commits = [self.commit_dict[ix] for ix in range(10000)]
         self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
         self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
+        if not self.TFIDF:
+            return
+        self.word_idf_dict = dict({})
+        for file_id in self.file_name_dict:
+            file_name = self.file_name_dict[file_id]
+            for word in filter(lambda x:x>0,file_name):
+                if word not in self.word_idf_dict:
+                    self.word_idf_dict[word] = 1
+                else:
+                    self.word_idf_dict[word] += 1
+        for word in self.word_idf_dict:
+            self.word_idf_dict[word] /= len(self.file_name_dict)
+        self.file_tfidf_dict = dict({})
+        for file_id in self.file_name_dict:
+            file_name = self.file_name_dict[file_id]
+            term_num, len_filename = dict({}), 0
+            for word in filter(lambda x:x>0, file_name):
+                len_filename += 1
+                if word not in term_num:
+                    term_num[word] = 1
+                else:
+                    term_num[word] += 1
+            self.file_tfidf_dict[file_id] = {word:(-1*term_num[word]/len_filename)*log(self.word_idf_dict[word],2) for word in term_num}
+
 
     def save_dict(self):
         f_file_id_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_file_id_dict.txt'%self.project, 'w')
@@ -148,9 +175,17 @@ class Data_gener:
             f_commit_dict.write(';'.join([str(k), ','.join(map(str,self.commit_dict[k][0])), ','.join(map(str,self.commit_dict[k][1]))]) + '\n')
         f_commit_dict.close()
 
+    def tfidf_tran(self,file_id):
+        tfidf = self.file_tfidf_dict[file_id]
+        return [0 if word not in tfidf else tfidf[word] for word in range(self.word_num)]
+        
+
     def gener(self, train_or_test, torch_or_numpy = 'torch', augmentation = False, big_autmentation = False):
         project = self.project
-        max_sequence_len = self.max_sequence_len
+        if not self.TFIDF:
+            max_sequence_len = self.max_sequence_len
+        else:
+            max_sequence_len = self.word_num
         batch_size = self.batch_size
         
         if train_or_test == 'train':
@@ -159,7 +194,7 @@ class Data_gener:
             commits = self.test_commits
         else:
             assert True, "train_or_test input error"
-        if augmentation:
+        if augmentation and not TFIDF:
             for commit_ix in range(len(commits)):
                 commit_files = commits[commit_ix][0]
                 aug_files = list(itertools.permutations(commit_files,2))
@@ -172,11 +207,14 @@ class Data_gener:
                         self.file_name_dict[aug_id] = aug_name
                 commits[commit_ix][0] = commits[commit_ix][0] + aug_files       
         
-        while True:
-            
+        while True: 
             num_commits   = len(commits)
-            left_samples  = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
-            right_samples = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
+            if not self.TFIDF:
+                left_samples  = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
+                right_samples = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
+            else:
+                left_samples  = np.zeros([batch_size, max_sequence_len], dtype=np.float)
+                right_samples = np.zeros([batch_size, max_sequence_len], dtype=np.float)
             label_samples = [0]* int(batch_size)
 
             shuffled_ix = list(range(batch_size))
@@ -184,17 +222,26 @@ class Data_gener:
 
             for sample_ix in shuffled_ix[:int(batch_size/2)]:
                 sample_commit = commits[random.randint(0,num_commits-1)][0]
-                left_samples[sample_ix], right_samples[sample_ix]  = map(lambda x:self.file_name_dict[x], random.sample(sample_commit,2))
+                if not self.TFIDF:
+                    left_samples[sample_ix], right_samples[sample_ix]  = map(lambda x:self.file_name_dict[x], random.sample(sample_commit,2))
+                else:
+                    left_samples[sample_ix], right_samples[sample_ix]  = map(lambda x:self.tfidf_tran(x), random.sample(sample_commit,2)) 
                 label_samples[sample_ix] = [1]
             
             for sample_ix in shuffled_ix[int(batch_size/2):]:
                 sample_commit_files, sample_other_files = commits[random.sample(range(0,num_commits),1)[0]]
-                left_samples[sample_ix] = self.file_name_dict[random.sample(sample_commit_files,1)[0]]
-                right_samples[sample_ix] = self.file_name_dict[random.sample(sample_other_files,1)[0]]
+                if not self.TFIDF:
+                    left_samples[sample_ix] = self.file_name_dict[random.sample(sample_commit_files,1)[0]]
+                    right_samples[sample_ix] = self.file_name_dict[random.sample(sample_other_files,1)[0]]
+                else:
+                    left_samples[sample_ix] = self.tfidf_tran(random.sample(sample_commit_files,1)[0])
+                    right_samples[sample_ix] = self.tfidf_tran(random.sample(sample_other_files,1)[0])
                 label_samples[sample_ix] = [0]
 
-            if torch_or_numpy == 'torch':
+            if torch_or_numpy == 'torch' and not self.TFIDF:
                 yield [torch.LongTensor(left_samples), torch.LongTensor(right_samples), torch.Tensor(label_samples)]
+            elif torch_or_numpy == 'torch' and self.TFIDF:
+                yield [torch.Tensor(left_samples), torch.Tensor(right_samples), torch.Tensor(label_samples)]
             elif torch_or_numpy == 'numpy':
                 yield ([left_samples, right_samples], np.array(label_samples))
 
@@ -209,8 +256,12 @@ class Data_gener:
         right_files_id = [right_files_id_[ix] for ix in ix_shuffle]
         label_samples = [label_samples_[ix] for ix in ix_shuffle]
         label_samples = torch.Tensor(label_samples)
-        left_samples = torch.LongTensor(np.array([self.file_name_dict[commit[0][file_ix]]]*num_other_files))
-        right_samples = torch.LongTensor( np.array(list(map(lambda x:self.file_name_dict[x], right_files_id))) )
+        if not self.TFIDF:
+            left_samples = torch.LongTensor(np.array([self.file_name_dict[commit[0][file_ix]]]*num_other_files))
+            right_samples = torch.LongTensor( np.array(list(map(lambda x:self.file_name_dict[x], right_files_id))) )
+        else:
+            left_samples = torch.Tensor(np.array([self.tfidf_tran(commit[0][file_ix])]*num_other_files))
+            right_samples = torch.Tensor( np.array([self.tfidf_tran(x) for x in  right_files_id]))  
         return left_samples, right_samples, label_samples.view(-1,1)
 
     def reverse_translate(self,X_array):
