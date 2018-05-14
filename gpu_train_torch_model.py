@@ -13,53 +13,55 @@ import time
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-BATCH_SIZE = 8196
+DEVICE_ID = 0
+BATCH_SIZE = 4096
 EMBEDDING_DIM = 64
-CONV_NUM_KERNEL1 = 128
-CONV_NUM_KERNEL2 = 64
+CONV_NUM_KERNEL1 = 300
+CONV_NUM_KERNEL2 = 32
 KERNEL_SIZE2 = 3
-KERNEL_SIZE1 = 3
+KERNEL_SIZE1 = 5
 FC1_NUM = 128
 FC2_NUM = 32
 START_TRAIN_STEPS = 0
-END_TRAIN_STEPS = 0
+END_TRAIN_STEPS = 40100
 START_AUG_TRAIN_STEPS = 0
-END_AUG_TRAIN_STEPS = 300001
-INIT_LEARNING_RATE1 = 0.001
+END_AUG_TRAIN_STEPS = 0
+INIT_LEARNING_RATE1 = 0.0005
 INIT_LEARNING_RATE2 = 0.001
 TOP_10_HIT_GATE1 = 0.89
 TOP_10_HIT_GATE2 = 3
 INIT_MODEL_NAME = ''#'model-0.3014-pars-2018-05-12-01-44.pkl'
-DEBUG = True
-EXPER_COMMENT = 'continue with augmentation from zero streamline\n embedding_dim %d\n conv_num_kernel1 %d\n kernel_size1 %d\n \
+DEBUG = False
+EXPER_COMMENT = 'continue with augmentation from zero streamline\n embedding_dim %d\n conv_num_kernel1 %d\n kernel_size1 %d\n conv_num_kernel2 %d\n kernel_size2 %d\n \
 fc1_num %d\n fc2_num %d\n start_train_steps %d\n end_train_steps %d\n start_aug_train_steps %d\n \
 end_aug_train_steps %d\n init_learning_rate1 %f\ninit_learning_rate2 %f\n init_model_name %s\n' \
-%(EMBEDDING_DIM, CONV_NUM_KERNEL1, KERNEL_SIZE1, FC1_NUM, FC2_NUM, START_TRAIN_STEPS, END_TRAIN_STEPS, \
+%(EMBEDDING_DIM, CONV_NUM_KERNEL1, KERNEL_SIZE1, CONV_NUM_KERNEL2, KERNEL_SIZE2, FC1_NUM, FC2_NUM, START_TRAIN_STEPS, END_TRAIN_STEPS, \
 START_AUG_TRAIN_STEPS, END_AUG_TRAIN_STEPS, INIT_LEARNING_RATE1, INIT_LEARNING_RATE2, INIT_MODEL_NAME)
 INIT_TEST = True and (DEBUG == False) and (START_AUG_TRAIN_STEPS == 0) and (INIT_MODEL_NAME != '')
 print(EXPER_COMMENT)
 
 experiment_start_time = time.strftime('%Y-%m-%d-%H-%M',time.localtime(time.time()))
 if DEBUG:
-    f_log = open('/home/song/change_recommend_pytorch/logs/debug.log','w')
+    f_log = open('/home/ub102/change_recommend_pytorch/logs/debug.log','w')
     f_log.write('experiment_start_time:\t'+experiment_start_time+'\n')
 else:
-    f_experiment_log = open('/home/song/change_recommend_pytorch/logs/experiment_directory.log','a')
-    f_log = open('/home/song/change_recommend_pytorch/logs/exper-%s.log'%experiment_start_time,'w')
+    f_experiment_log = open('/home/ub102/change_recommend_pytorch/logs/experiment_directory.log','a')
+    f_log = open('/home/ub102/change_recommend_pytorch/logs/exper-%s.log'%experiment_start_time,'w')
     f_experiment_log.write(experiment_start_time+': '+EXPER_COMMENT+'\n')
     f_experiment_log.close()
     f_log.write('experiment_start_time:\t'+experiment_start_time+'\n')
+    f_log.write(EXPER_COMMENT+'\n')
 
 g = Data_gener('wine', batch_size = BATCH_SIZE)
 gg = g.gener('train', augmentation=False)
 ga = g.gener('train', augmentation=True)
 criterion = nn.BCELoss()
 net = symcnn_model(embedding_dim = EMBEDDING_DIM, conv_num_kernel1 = CONV_NUM_KERNEL1, \
-fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size1 = KERNEL_SIZE1, kernel_size2 = KERNEL_SIZE2,conv_num_kernel2 = CONV_NUM_KERNEL2).cuda()
+fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size1 = KERNEL_SIZE1, kernel_size2 = KERNEL_SIZE2,conv_num_kernel2 = CONV_NUM_KERNEL2).cuda(DEVICE_ID)
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-pars-first-night.pkl'))
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-0.8947-pars-2018-04-18-20-21.pkl'))
 if INIT_MODEL_NAME != '':
-    net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/'+INIT_MODEL_NAME))
+    net.load_state_dict(torch.load('/home/ub102/change_recommend_pytorch/models/'+INIT_MODEL_NAME))
 
 def analysis_result(output, xy, label, loss, hit = False):
     mse_loss = float(loss.data)
@@ -83,8 +85,8 @@ def analysis_result(output, xy, label, loss, hit = False):
 
 gt = g.gener('test')
 xy_t = next(gt)
-x_t = [autograd.Variable(i.cuda()) for i in xy_t[:2]]
-label_t = xy_t[2].cuda()    
+x_t = [autograd.Variable(i.cuda(DEVICE_ID)) for i in xy_t[:2]]
+label_t = xy_t[2].cuda(DEVICE_ID)    
 target_t = autograd.Variable(label_t)
 
 def validation(val_interv):
@@ -99,8 +101,8 @@ def validation(val_interv):
             print('test commit id:',commit_ix)
         for file_ix in range(len(g.test_commits[commit_ix][0])):
             left_samples, right_samples, label_samples = g.commit_validation_generation(commit_ix, file_ix)
-            x = [autograd.Variable(i.cuda()) for i in [left_samples, right_samples]]
-            label = label_samples.cuda()
+            x = [autograd.Variable(i.cuda(DEVICE_ID)) for i in [left_samples, right_samples]]
+            label = label_samples.cuda(DEVICE_ID)
             output = net(x)
             target = autograd.Variable(label)
             loss = criterion(output, target)
@@ -146,8 +148,8 @@ if INIT_TEST:
 
 def train_with_gener(gener,cnt, optim, top_10_hit_gate):
     xy = next(gener)
-    x = [autograd.Variable(i.cuda()) for i in xy[:2]]
-    label = xy[2].cuda()
+    x = [autograd.Variable(i.cuda(DEVICE_ID)) for i in xy[:2]]
+    label = xy[2].cuda(DEVICE_ID)
 
     output = net(x)
     target = autograd.Variable(label)
@@ -168,8 +170,8 @@ def train_with_gener(gener,cnt, optim, top_10_hit_gate):
             top_10_hit = val_report_data[1]
             print(val_report)
             cur_time = time.strftime('%Y-%m-%d-%H-%M',time.localtime(time.time()))
-            torch.save(net, '/home/song/change_recommend_pytorch/models/model-%.4f-%s.pkl'%(top_10_hit, cur_time)) 
-            torch.save(net.state_dict(), '/home/song/change_recommend_pytorch/models/model-%.4f-pars-%s.pkl'%(top_10_hit, cur_time))
+            torch.save(net, '/home/ub102/change_recommend_pytorch/models/model-%.4f-%s.pkl'%(top_10_hit, cur_time)) 
+            torch.save(net.state_dict(), '/home/ub102/change_recommend_pytorch/models/model-%.4f-pars-%s.pkl'%(top_10_hit, cur_time))
             print('model_saved')
             return False
     if cnt%5000 == 0 and cnt > 0:
@@ -177,8 +179,8 @@ def train_with_gener(gener,cnt, optim, top_10_hit_gate):
         val_report = val_report_data[8]
         top_10_hit = val_report_data[1]
         cur_time = time.strftime('%Y-%m-%d-%H-%M',time.localtime(time.time()))
-        torch.save(net, '/home/song/change_recommend_pytorch/models/model-%.4f-%s.pkl'%(top_10_hit, cur_time)) 
-        torch.save(net.state_dict(), '/home/song/change_recommend_pytorch/models/model-%.4f-pars-%s.pkl'%(top_10_hit, cur_time))
+        torch.save(net, '/home/ub102/change_recommend_pytorch/models/model-%.4f-%s.pkl'%(top_10_hit, cur_time)) 
+        torch.save(net.state_dict(), '/home/ub102/change_recommend_pytorch/models/model-%.4f-pars-%s.pkl'%(top_10_hit, cur_time))
         f_log.write('model saved:\t%s\n'%cur_time)
         f_log.write(val_report)
         print(val_report)

@@ -66,18 +66,21 @@ class Data_gener:
         commits = [ line.strip('\n').split(',') for line in open('projects/selected_file_list/%s_selected_file_list.txt'%self.project,'r') ]
         assert len(commits) == 10000, "commits number is not 10000"
         
-        print('cd /home/song/change_recommend_pytorch/projects/%s'%self.project)
-        print(os.popen('cd /home/song/change_recommend_pytorch/projects/%s'%self.project).read())
+        print('cd /home/ub102/change_recommend_pytorch/projects/%s'%self.project)
+        print(os.popen('cd /home/ub102/change_recommend_pytorch/projects/%s'%self.project).read())
         print(os.popen('pwd').read())
         print('hi')
-        l = len(os.popen('cd /home/song/change_recommend_pytorch/projects/%s && git reset --hard 3f281a3baad9f5f8f875da902718a1d5d3dc0d9f' %self.project).read())
+        if self.project=='wine':
+            l = len(os.popen('cd /home/ub102/change_recommend_pytorch/projects/%s && git reset --hard 3f281a3baad9f5f8f875da902718a1d5d3dc0d9f' %self.project).read())
+        else:
+            l = len(os.popen('cd /home/ub102/change_recommend_pytorch/projects/%s && git reset --hard %s' %(self.project,commits[0][0])).read())
         print('hi')
         for commit_id in range(len(commits)):
             commit = commits[commit_id]
             commit_hash = commit[0]
             commit_files = self.fit_file_name(commit[1:])
-            l = len(os.popen('cd /home/song/change_recommend_pytorch/projects/%s && git checkout %s &> /dev/null'%(self.project, commit_hash)).read())
-            all_files = os.popen('cd /home/song/change_recommend_pytorch/projects/%s && find . -type f'%(self.project)).read().split('\n')
+            l = len(os.popen('cd /home/ub102/change_recommend_pytorch/projects/%s && git checkout %s &> /dev/null'%(self.project, commit_hash)).read())
+            all_files = os.popen('cd /home/ub102/change_recommend_pytorch/projects/%s && find . -type f'%(self.project)).read().split('\n')
             all_files = list(map(lambda x:x[2:], filter(lambda x:True if len(x)>2 else False, all_files)))
             all_files = self.fit_file_name(all_files, filter_id_list = commit_files)
             commits[commit_id] = [commit_hash, commit_files, all_files]
@@ -97,23 +100,23 @@ class Data_gener:
 
     
     def easy_init(self):
-        f_file_id_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_file_id_dict.txt'%self.project, 'r')
+        f_file_id_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_file_id_dict.txt'%self.project, 'r')
         for line in f_file_id_dict:
             line = line.strip('\n').split(',')
             self.file_id_dict[line[0]] = int(line[1])
         f_file_id_dict.close()
-        f_word_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_word_dict.txt'%self.project, 'r')
+        f_word_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_word_dict.txt'%self.project, 'r')
         for line in f_word_dict:
             line = line.strip('\n').split(',')
             self.word_dict[line[0]] = int(line[1])
         f_word_dict.close()
-        f_file_name_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_file_name_dict.txt'%self.project, 'r')
+        f_file_name_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_file_name_dict.txt'%self.project, 'r')
         for line in f_file_name_dict:
             line = list(map(int,line.strip('\n').split(',')))
             assert len(line) == 21, "file_name_dict load error" 
             self.file_name_dict[line[0]] = np.array(line[1:])
         f_file_name_dict.close()
-        f_commit_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_commit_dict.txt'%self.project, 'r')
+        f_commit_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_commit_dict.txt'%self.project, 'r')
         for line in f_commit_dict:
             commit_id, commit_files, other_files = line.strip('\n').split(';')
             commit_id, commit_files, other_files = int(commit_id), list(map(int, commit_files.split(','))), list(map(int, other_files.split(',')))
@@ -128,19 +131,19 @@ class Data_gener:
         self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
 
     def save_dict(self):
-        f_file_id_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_file_id_dict.txt'%self.project, 'w')
+        f_file_id_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_file_id_dict.txt'%self.project, 'w')
         for k in self.file_id_dict.keys():
             f_file_id_dict.write(','.join([str(k), str(self.file_id_dict[k]) ]) + '\n')
         f_file_id_dict.close()
-        f_word_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_word_dict.txt'%self.project, 'w')
+        f_word_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_word_dict.txt'%self.project, 'w')
         for k in self.word_dict.keys():
             f_word_dict.write(','.join([str(k), str(self.word_dict[k]) ]) + '\n')
         f_word_dict.close()
-        f_file_name_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_file_name_dict.txt'%self.project, 'w')
+        f_file_name_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_file_name_dict.txt'%self.project, 'w')
         for k in self.file_name_dict.keys():
             f_file_name_dict.write(','.join([str(k)]+ list(map(str,self.file_name_dict[k]))) + '\n')
         f_file_name_dict.close()
-        f_commit_dict = open('/home/song/change_recommend_pytorch/projects/dicts/%s_commit_dict.txt'%self.project, 'w')
+        f_commit_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_commit_dict.txt'%self.project, 'w')
         for k in self.commit_dict.keys():
             f_commit_dict.write(';'.join([str(k), ','.join(map(str,self.commit_dict[k][0])), ','.join(map(str,self.commit_dict[k][1]))]) + '\n')
         f_commit_dict.close()
