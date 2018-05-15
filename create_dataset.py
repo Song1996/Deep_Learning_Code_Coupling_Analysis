@@ -133,6 +133,7 @@ class Data_gener:
         self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
         self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
         if not self.TFIDF:
+            self.file_matrix = torch.LongTensor(np.array([self.file_name_dict[ix] for ix in self.file_name_dict]))
             return
         self.word_idf_dict = dict({})
         for file_id in self.file_name_dict:
@@ -155,7 +156,7 @@ class Data_gener:
                 else:
                     term_num[word] += 1
             self.file_tfidf_dict[file_id] = {word:(-1*term_num[word]/len_filename)*log(self.word_idf_dict[word],2) for word in term_num}
-
+        self.file_matrix = torch.Tensor([self.tfidf_tran(ix) for ix in self.file_tfidf_dict])
 
     def save_dict(self):
         f_file_id_dict = open('/home/ub102/change_recommend_pytorch/projects/dicts/%s_file_id_dict.txt'%self.project, 'w')
@@ -209,12 +210,8 @@ class Data_gener:
         
         while True: 
             num_commits   = len(commits)
-            if not self.TFIDF:
-                left_samples  = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
-                right_samples = np.zeros([batch_size, max_sequence_len], dtype=np.int64)
-            else:
-                left_samples  = np.zeros([batch_size, max_sequence_len], dtype=np.float)
-                right_samples = np.zeros([batch_size, max_sequence_len], dtype=np.float)
+            left_samples = [0] * batch_size
+            right_samples = [0] * batch_size
             label_samples = [0]* int(batch_size)
 
             shuffled_ix = list(range(batch_size))
@@ -222,26 +219,16 @@ class Data_gener:
 
             for sample_ix in shuffled_ix[:int(batch_size/2)]:
                 sample_commit = commits[random.randint(0,num_commits-1)][0]
-                if not self.TFIDF:
-                    left_samples[sample_ix], right_samples[sample_ix]  = map(lambda x:self.file_name_dict[x], random.sample(sample_commit,2))
-                else:
-                    left_samples[sample_ix], right_samples[sample_ix]  = map(lambda x:self.tfidf_tran(x), random.sample(sample_commit,2)) 
+                left_samples[sample_ix], right_samples[sample_ix]  = map(lambda x:x, random.sample(sample_commit,2))
                 label_samples[sample_ix] = [1]
             
             for sample_ix in shuffled_ix[int(batch_size/2):]:
                 sample_commit_files, sample_other_files = commits[random.sample(range(0,num_commits),1)[0]]
-                if not self.TFIDF:
-                    left_samples[sample_ix] = self.file_name_dict[random.sample(sample_commit_files,1)[0]]
-                    right_samples[sample_ix] = self.file_name_dict[random.sample(sample_other_files,1)[0]]
-                else:
-                    left_samples[sample_ix] = self.tfidf_tran(random.sample(sample_commit_files,1)[0])
-                    right_samples[sample_ix] = self.tfidf_tran(random.sample(sample_other_files,1)[0])
+                left_samples[sample_ix] = random.sample(sample_commit_files,1)[0]
+                right_samples[sample_ix] = random.sample(sample_other_files,1)[0]
                 label_samples[sample_ix] = [0]
-
-            if torch_or_numpy == 'torch' and not self.TFIDF:
-                yield [torch.LongTensor(left_samples), torch.LongTensor(right_samples), torch.Tensor(label_samples)]
-            elif torch_or_numpy == 'torch' and self.TFIDF:
-                yield [torch.Tensor(left_samples), torch.Tensor(right_samples), torch.Tensor(label_samples)]
+            if torch_or_numpy == 'torch':
+                yield [left_samples, right_samples, torch.Tensor(label_samples)]
             elif torch_or_numpy == 'numpy':
                 yield ([left_samples, right_samples], np.array(label_samples))
 
@@ -257,11 +244,11 @@ class Data_gener:
         label_samples = [label_samples_[ix] for ix in ix_shuffle]
         label_samples = torch.Tensor(label_samples)
         if not self.TFIDF:
-            left_samples = torch.LongTensor(np.array([self.file_name_dict[commit[0][file_ix]]]*num_other_files))
-            right_samples = torch.LongTensor( np.array(list(map(lambda x:self.file_name_dict[x], right_files_id))) )
+            left_samples = [commit[0][file_ix]]*num_other_files
+            right_samples = right_files_id
         else:
-            left_samples = torch.Tensor(np.array([self.tfidf_tran(commit[0][file_ix])]*num_other_files))
-            right_samples = torch.Tensor( np.array([self.tfidf_tran(x) for x in  right_files_id]))  
+            left_samples = [commit[0][file_ix]]*num_other_files
+            right_samples = right_files_id
         return left_samples, right_samples, label_samples.view(-1,1)
 
     def reverse_translate(self,X_array):
