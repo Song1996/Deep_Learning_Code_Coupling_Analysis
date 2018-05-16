@@ -34,13 +34,14 @@ class Data_gener:
         return file_name_list[:cnt]
 
 
-    def __init__(self, project , max_sequence_len =20, batch_size = 512, TFIDF = False, WORD_NUM=3500):
+    def __init__(self, project , max_sequence_len =20, batch_size = 512, TFIDF = False, WORD_NUM=3500, AUG =True):
         #random.seed(1)
         self.project = project
         self.max_sequence_len = max_sequence_len
         self.batch_size = batch_size
         self.TFIDF = TFIDF
         self.word_num =WORD_NUM
+        self.AUG=True
 
         self.file_id_dict = dict({})
         self.word_dict = dict({' ':0})
@@ -132,6 +133,21 @@ class Data_gener:
         commits = [self.commit_dict[ix] for ix in range(10000)]
         self.train_commits = [self.commit_dict[ix] for ix in range(3000,10000)]
         self.test_commits = [self.commit_dict[ix] for ix in range(3000)]
+        
+        self.aug_dict = dict({})         
+        if self.AUG and not self.TFIDF:
+            for commit_ix in range(len(commits)):
+                commit_files = commits[commit_ix][0]
+                aug_files = list(itertools.permutations(commit_files,2))
+                for aug_id in aug_files:
+                    if aug_id not in self.file_name_dict.keys():
+                        names = list(map(lambda x:list(self.file_name_dict[x]), aug_id))
+                        names = list(map(lambda x: x[:x.index(0)] if 0 in x else x, names))
+                        aug_name = sum(names,[])[:self.max_sequence_len]
+                        aug_name = np.lib.pad(aug_name, [0, self.max_sequence_len - len(aug_name)], 'constant')
+                        self.file_name_dict[aug_id] = aug_name
+                self.aug_dict[commit_ix] = aug_files
+
         if not self.TFIDF:
             self.file_matrix = torch.LongTensor(np.array([self.file_name_dict[ix] for ix in self.file_name_dict]))
             return
@@ -195,18 +211,9 @@ class Data_gener:
             commits = self.test_commits
         else:
             assert True, "train_or_test input error"
-        if augmentation and not TFIDF:
-            for commit_ix in range(len(commits)):
-                commit_files = commits[commit_ix][0]
-                aug_files = list(itertools.permutations(commit_files,2))
-                for aug_id in aug_files:
-                    if aug_id not in self.file_name_dict.keys():
-                        names = list(map(lambda x:list(self.file_name_dict[x]), aug_id))
-                        names = list(map(lambda x: x[:x.index(0)] if 0 in x else x, names))
-                        aug_name = sum(names,[])[:self.max_sequence_len]
-                        aug_name = np.lib.pad(aug_name, [0, self.max_sequence_len - len(aug_name)], 'constant')
-                        self.file_name_dict[aug_id] = aug_name
-                commits[commit_ix][0] = commits[commit_ix][0] + aug_files       
+        if augmentation and train_or_test == 'train':
+            for commit_ix in range(len(commit)):
+                commits[commit_ix] = commits[commit_ix] + self.aug_dict[commit_ix]
         
         while True: 
             num_commits   = len(commits)

@@ -14,27 +14,27 @@ import time
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-DEVICE_ID = 0
+DEVICE_ID = 1
 TFIDF = False
 BATCH_SIZE = 2048
 EMBEDDING_DIM = 64
-CONV_NUM_KERNEL1 = 512
+CONV_NUM_KERNEL1 = 700
 CONV_NUM_KERNEL2 = 32
 KERNEL_SIZE2 = 3
 KERNEL_SIZE1 = 5
 FC1_NUM = 64
-FC2_NUM = 32
+FC2_NUM = 64
 FC3_NUM = 32
 START_TRAIN_STEPS = 0
-END_TRAIN_STEPS = 0
+END_TRAIN_STEPS = 160100
 START_AUG_TRAIN_STEPS = 0
-END_AUG_TRAIN_STEPS = 160100
+END_AUG_TRAIN_STEPS = 0
 INIT_LEARNING_RATE1 = 0.0001
 INIT_LEARNING_RATE2 = 0.00001
 TOP_10_HIT_GATE1 = 1.2
 TOP_10_HIT_GATE2 = 3
-INIT_MODEL_NAME = 'model-0.5550-pars-2018-05-15-06-56.pkl'
-DEBUG = False
+INIT_MODEL_NAME = ''#'model-0.5550-pars-2018-05-15-06-56.pkl'
+DEBUG = True
 EXPER_COMMENT = 'continue with augmentation from zero streamline\n embedding_dim %d\n conv_num_kernel1 %d\n kernel_size1 %d\n conv_num_kernel2 %d\n kernel_size2 %d\n \
 fc1_num %d\n fc2_num %d\n fc3_num %d\n start_train_steps %d\n end_train_steps %d\n start_aug_train_steps %d\n \
 end_aug_train_steps %d\n init_learning_rate1 %f\ninit_learning_rate2 %f\n init_model_name %s\n TFIDF %d\n' \
@@ -86,7 +86,8 @@ def analysis_result(output, xy, label, loss, hit = False):
         top_5_hit, top_5_hit_num = 1 if sum(hits_info[:5]) > 0 else 0, sum(hits_info[:5])
         top_3_hit, top_3_hit_num = 1 if sum(hits_info[:3]) > 0 else 0, sum(hits_info[:3])
         top_1_hit, top_1_hit_num = 1 if sum(hits_info[:1]) > 0 else 0, sum(hits_info[:1])
-        ap = np.dot(np.array([1.0/(i+1) for i in range(min(100,len(hits_info)))]),np.array(hits_info[:100]))/sum(hits_info)
+        hits_info_sum = [sum(hits_info[:i+1]) for i in range(len(hits_info))]
+        ap = np.dot(np.array([hits_info_sum[i]/(i+1) for i in range(min(100,len(hits_info)))]),np.array(hits_info[:100]))/sum(hits_info)
         return [report_str, mse_loss, acc, auc, [top_10_hit, top_5_hit, top_3_hit, top_1_hit], [top_10_hit_num, top_5_hit_num, top_3_hit_num, top_1_hit_num], ap]
     else:    
         return [report_str, mse_loss, acc, auc]
