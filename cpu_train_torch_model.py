@@ -56,17 +56,17 @@ else:
     f_log.write(EXPER_COMMENT+'\n')
 
 g = Data_gener('wine', batch_size = BATCH_SIZE,TFIDF =TFIDF)
-file_matrix = g.file_matrix.cuda(DEVICE_ID)
+file_matrix = g.file_matrix
 gg = g.gener('train', augmentation=False)
 ga = g.gener('train', augmentation=True)
 criterion = nn.BCELoss()
 if not TFIDF:
     net = symcnn_model(embedding_dim = EMBEDDING_DIM, conv_num_kernel1 = CONV_NUM_KERNEL1, \
-fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size1 = KERNEL_SIZE1, kernel_size2 = KERNEL_SIZE2,conv_num_kernel2 = CONV_NUM_KERNEL2).cuda(DEVICE_ID)
+fc1_num = FC1_NUM, fc2_num = FC2_NUM, kernel_size1 = KERNEL_SIZE1, kernel_size2 = KERNEL_SIZE2,conv_num_kernel2 = CONV_NUM_KERNEL2)
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-pars-first-night.pkl'))
 #net.load_state_dict(torch.load('/home/song/change_recommend_pytorch/models/model-0.8947-pars-2018-04-18-20-21.pkl'))
 else:
-    net = dnn_model(fc1_num = FC1_NUM, fc2_num = FC2_NUM).cuda(DEVICE_ID)
+    net = dnn_model(fc1_num = FC1_NUM, fc2_num = FC2_NUM)
 
 if INIT_MODEL_NAME != '':
     net.load_state_dict(torch.load('/home/ub102/change_recommend_pytorch/models/'+INIT_MODEL_NAME))
@@ -97,7 +97,7 @@ def analysis_result(output, xy, label, loss, hit = False):
 gt = g.gener('test')
 xy_t = next(gt)
 x_t = [autograd.Variable(file_matrix[i]) for i in xy_t[:2]]
-label_t = xy_t[2].cuda(DEVICE_ID)    
+label_t = xy_t[2]    
 target_t = autograd.Variable(label_t)
 
 def validation(val_interv):
@@ -113,7 +113,7 @@ def validation(val_interv):
         for file_ix in range(len(g.test_commits[commit_ix][0])):
             left_samples, right_samples, label_samples = g.commit_validation_generation(commit_ix, file_ix)
             x = [autograd.Variable(file_matrix[i]) for i in [left_samples, right_samples]]
-            label = label_samples.cuda(DEVICE_ID)
+            label = label_samples
             output = net(x)
             target = autograd.Variable(label)
             loss = criterion(output, target)
@@ -160,7 +160,7 @@ if INIT_TEST:
 def train_with_gener(gener,cnt, optim, top_10_hit_gate):
     xy = next(gener)
     x = [autograd.Variable(file_matrix[i]) for i in xy[:2]]
-    label = xy[2].cuda(DEVICE_ID)
+    label = xy[2]
 
     output = net(x)
     target = autograd.Variable(label)
